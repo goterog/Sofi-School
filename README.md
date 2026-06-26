@@ -12,6 +12,7 @@ Sofi School es una web app para presentar un programa familiar guiado de educaci
 - Imagen hero generada y guardada en `public/images/hero-learning-table.png`.
 - Deploy inicial en Vercel verificado: `https://sofi-school-guillermos-projects-d93f9572.vercel.app`.
 - Deployment directo inmutable: `https://sofi-school-71hnahnxg-guillermos-projects-d93f9572.vercel.app`.
+- Proyecto conectado a GitHub: `goterog/Sofi-School`.
 
 ## Stack
 
@@ -163,6 +164,7 @@ npm audit --omit=dev
 ## Despliegue recomendado
 
 El proyecto Vercel actual se llama `sofi-school` en el scope `guillermos-projects-d93f9572`.
+La configuración versionada en `vercel.json` fija el framework como `nextjs` para que los deploys automáticos desde Git usen el preset correcto.
 
 URLs actuales:
 
@@ -175,13 +177,12 @@ Deploy manual desde esta carpeta:
 npx vercel deploy --prod --yes
 ```
 
-Para completar el flujo automático de trabajo:
+Flujo automático de trabajo:
 
-1. En Vercel, conectar el proyecto `sofi-school` con el repo `goterog/Sofi-School`.
-2. Usar `main` como rama de producción.
-3. Mantener cambios nuevos en ramas `feature/...` para obtener previews automáticos.
-4. Cuando Supabase esté listo, configurar variables de entorno en Vercel.
-5. Revisar políticas de privacidad, consentimiento y backups antes de usar datos reales de menores.
+1. `main` funciona como rama de producción.
+2. Mantener cambios nuevos en ramas `feature/...` para obtener previews automáticos.
+3. Cuando Supabase esté listo, configurar variables de entorno en Vercel.
+4. Revisar políticas de privacidad, consentimiento y backups antes de usar datos reales de menores.
 
 Activación de Supabase:
 
