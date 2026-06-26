@@ -10,6 +10,8 @@ Sofi School es una web app para presentar un programa familiar guiado de educaci
 - API de contacto en `/api/contact`, con validación Zod y guardado opcional en Supabase.
 - Migración Supabase con tablas base, Row Level Security y buckets privados.
 - Imagen hero generada y guardada en `public/images/hero-learning-table.png`.
+- Deploy inicial en Vercel verificado: `https://sofi-school-guillermos-projects-d93f9572.vercel.app`.
+- Deployment directo inmutable: `https://sofi-school-71hnahnxg-guillermos-projects-d93f9572.vercel.app`.
 
 ## Stack
 
@@ -160,9 +162,30 @@ npm audit --omit=dev
 
 ## Despliegue recomendado
 
+El proyecto Vercel actual se llama `sofi-school` en el scope `guillermos-projects-d93f9572`.
+
+URLs actuales:
+
+- Producción verificada: `https://sofi-school-guillermos-projects-d93f9572.vercel.app`.
+- Alias corto asignado por Vercel, pendiente de verificar si responde desde todos los edges: `https://sofi-school.vercel.app`.
+
+Deploy manual desde esta carpeta:
+
+```bash
+npx vercel deploy --prod --yes
+```
+
+Para completar el flujo automático de trabajo:
+
+1. En Vercel, conectar el proyecto `sofi-school` con el repo `goterog/Sofi-School`.
+2. Usar `main` como rama de producción.
+3. Mantener cambios nuevos en ramas `feature/...` para obtener previews automáticos.
+4. Cuando Supabase esté listo, configurar variables de entorno en Vercel.
+5. Revisar políticas de privacidad, consentimiento y backups antes de usar datos reales de menores.
+
+Activación de Supabase:
+
 1. Crear proyecto Supabase.
 2. Aplicar la migración SQL.
-3. Crear usuarios/invitaciones desde Supabase Auth o flujo administrativo futuro.
-4. Configurar variables en Vercel.
-5. Desplegar desde GitHub.
-6. Revisar políticas de privacidad, consentimiento y backups antes de usar datos reales de menores.
+3. Configurar `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` y `SUPABASE_SERVICE_ROLE_KEY` en Vercel.
+4. Crear usuarios/invitaciones desde Supabase Auth o un flujo administrativo futuro.
