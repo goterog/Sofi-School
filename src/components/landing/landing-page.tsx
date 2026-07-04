@@ -788,7 +788,11 @@ function ContactSection() {
             </p>
           ) : null}
           <p className="mt-4 text-xs leading-5 text-ink/52">
-            Al enviar este formulario aceptas ser contactado sobre el programa. Antes de producción se debe publicar aviso de privacidad completo.
+            Al enviar este formulario aceptas ser contactado sobre el programa. Consulta el{" "}
+            <Link href="/privacidad" className="font-semibold text-forest underline-offset-4 hover:underline">
+              aviso de privacidad base
+            </Link>
+            .
           </p>
         </form>
       </div>

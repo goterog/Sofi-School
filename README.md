@@ -6,9 +6,12 @@ Sofi School es una web app para presentar un programa familiar guiado de educaci
 
 - Landing pública lista en `/`, con hero, principios, metodología, áreas, portafolio, recursos, manifiesto breve y contacto.
 - Dashboard privado preparado en `/dashboard`, con modo demo local cuando Supabase no está configurado.
-- Login en `/login`, diseñado para acceso por invitación y no para registro abierto.
+- Login en `/login`, diseñado para Google OAuth con acceso por invitación y no para registro abierto.
+- Callback OAuth en `/auth/callback`.
 - API de contacto en `/api/contact`, con validación Zod y guardado opcional en Supabase.
-- Migración Supabase con tablas base, Row Level Security y buckets privados.
+- Migraciones Supabase con tablas base, Row Level Security, buckets privados, guías, submaterias, invitaciones y consentimientos.
+- Dashboard v1 con secciones de guía, materiales, portafolio documental y configuración.
+- Aviso de privacidad base en `/privacidad` y `docs/PRIVACY.md`.
 - Imagen hero generada y guardada en `public/images/hero-learning-table.png`.
 - Deploy inicial en Vercel verificado: `https://sofi-school-guillermos-projects-d93f9572.vercel.app`.
 - Deployment directo inmutable: `https://sofi-school-71hnahnxg-guillermos-projects-d93f9572.vercel.app`.
@@ -51,6 +54,11 @@ Next.js no usa un `.html` editable como una página estática tradicional. El HT
 - `/dashboard`: resumen de familias, alumnos, evidencias y recursos.
 - `/dashboard/alumnos/[id]`: portafolio de un alumno.
 - `/api/contact`: endpoint del formulario público.
+- `/api/dashboard/portfolio`: captura privada de evidencias y enlaces externos.
+- `/api/dashboard/invitations`: allowlist de invitaciones para admins.
+- `/api/privacy/consents`: registro de consentimiento familiar.
+- `/auth/callback`: intercambio PKCE para OAuth.
+- `/privacidad`: aviso de privacidad base.
 
 ## Funciones públicas
 
@@ -66,10 +74,15 @@ Next.js no usa un `.html` editable como una página estática tradicional. El HT
 - Dashboard preparado para familias múltiples.
 - Roles previstos: `admin` y `parent`.
 - Acceso por invitación mediante Supabase Auth.
+- Google OAuth como flujo principal de acceso.
+- Allowlist fuerte con `invitations` y Auth Hook `hook_require_invitation`.
 - Vista por familia/alumno.
-- Portafolio organizado por área y periodo.
+- Guías de actividad por área y submateria.
+- Biblioteca de materiales por área, submateria, fuente y audiencia.
+- Portafolio organizado por fecha, área, submateria, periodo y tipo de evidencia.
 - Evidencias previstas: notas, fotos, documentos, clips pequeños y enlaces privados a videos largos.
-- Biblioteca de recursos con documentos, materiales y enlaces externos.
+- Registro de enlaces privados externos para mantener ligera la DB gratuita de Supabase.
+- Consentimiento familiar para uso de imágenes, videos y trabajos de menores.
 - Modo demo local para revisar la UI sin configurar Supabase.
 
 ## Modelo de datos
@@ -88,6 +101,10 @@ La migración inicial crea:
 - `resource_links`
 - `contact_requests`
 - `audit_events`
+- `learning_topics`
+- `activity_guides`
+- `invitations`
+- `privacy_consents`
 
 También crea los buckets privados:
 
@@ -107,8 +124,10 @@ La seguridad está pensada desde la base:
 - Validación de archivos por tipo y tamaño.
 - Auditoría básica para eventos sensibles.
 - `SUPABASE_SERVICE_ROLE_KEY` solo debe vivir en servidor.
+- El cliente administrativo no usa anon como fallback.
+- Videos y archivos pesados deben vivir como enlaces privados externos restringidos por correo.
 
-Antes de producción falta publicar aviso de privacidad para México, definir consentimiento para uso de imágenes/videos de menores, revisar retención de datos y activar MFA para administradores si el proyecto Supabase lo permite.
+Antes de producción falta revisar legalmente el aviso de privacidad, cerrar plazos de retención, validar el consentimiento para uso de imágenes/videos de menores y activar MFA para administradores si Supabase lo permite.
 
 ## Desarrollo local
 
@@ -190,3 +209,6 @@ Activación de Supabase:
 2. Aplicar la migración SQL.
 3. Configurar `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` y `SUPABASE_SERVICE_ROLE_KEY` en Vercel.
 4. Crear usuarios/invitaciones desde Supabase Auth o un flujo administrativo futuro.
+5. Configurar Google OAuth en Supabase Authentication > Providers.
+6. Activar `hook_require_invitation` en Authentication > Hooks como Before User Created Hook.
+7. Registrar invitaciones en `/dashboard` con una cuenta admin o insertarlas directamente en `invitations`.
