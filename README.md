@@ -13,8 +13,8 @@ Sofi School es una web app para presentar un programa familiar guiado de educaci
 - Dashboard v1 con secciones de guía, materiales, portafolio documental y configuración.
 - Aviso de privacidad base en `/privacidad` y `docs/PRIVACY.md`.
 - Imagen hero generada y guardada en `public/images/hero-learning-table.png`.
+- Producción verificada: `https://sofi-school.vercel.app`.
 - Deploy inicial en Vercel verificado: `https://sofi-school-guillermos-projects-d93f9572.vercel.app`.
-- Deployment directo inmutable: `https://sofi-school-71hnahnxg-guillermos-projects-d93f9572.vercel.app`.
 - Proyecto conectado a GitHub: `goterog/Sofi-School`.
 
 ## Stack
@@ -187,8 +187,7 @@ La configuración versionada en `vercel.json` fija el framework como `nextjs` pa
 
 URLs actuales:
 
-- Producción verificada: `https://sofi-school-guillermos-projects-d93f9572.vercel.app`.
-- Alias corto asignado por Vercel, pendiente de verificar si responde desde todos los edges: `https://sofi-school.vercel.app`.
+- Producción verificada: `https://sofi-school.vercel.app`.
 
 Deploy manual desde esta carpeta:
 
