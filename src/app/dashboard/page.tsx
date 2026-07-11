@@ -3,8 +3,8 @@ import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { demoDashboardData } from "@/lib/demo-data";
 import { getCurrentSession } from "@/lib/supabase/server";
 
-type FamilyRow = { id: string; name: string; city: string | null };
-type StudentRow = { id: string; family_id: string; full_name: string; birth_year: number | null; stage: string | null };
+type FamilyRow = { id: string; name: string; city: string | null; status: string };
+type StudentRow = { id: string; family_id: string; full_name: string; birth_year: number | null; stage: string | null; status: string };
 type AreaRow = { id: string; slug: string; name: string; description: string | null };
 type TopicRow = { id: string; area_id: string; slug: string; name: string; description: string | null };
 type GuideRow = {
@@ -17,6 +17,7 @@ type GuideRow = {
   materials: string[];
   steps: string[];
   evidence_prompt: string | null;
+  status: string;
   learning_areas: { name: string } | { name: string }[] | null;
   learning_topics: { name: string } | { name: string }[] | null;
 };
@@ -30,6 +31,10 @@ type ResourceRow = {
   audience: string | null;
   external_url: string | null;
   access_notes: string | null;
+  area_id: string | null;
+  topic_id: string | null;
+  status: string;
+  storage_path: string | null;
   learning_areas: { name: string } | { name: string }[] | null;
   learning_topics: { name: string } | { name: string }[] | null;
 };
@@ -50,6 +55,9 @@ type EntryRow = {
   learning_topics: { name: string } | { name: string }[] | null;
   periods: { label: string } | { label: string }[] | null;
   portfolio_media: Array<{ id: string }> | null;
+  created_by: string | null;
+  status: string;
+  profiles: { full_name: string | null; email: string | null } | { full_name: string | null; email: string | null }[] | null;
 };
 type ConsentRow = {
   id: string;
@@ -94,10 +102,10 @@ async function loadDashboardData(
 ) {
   const familiesQuery =
     role === "admin"
-      ? supabase.from("families").select("id,name,city").order("created_at", { ascending: false }).limit(8)
+      ? supabase.from("families").select("id,name,city,status").eq("status", "active").order("created_at", { ascending: false }).limit(100)
       : supabase
           .from("family_members")
-          .select("families(id,name,city)")
+          .select("families(id,name,city,status)")
           .eq("user_id", userId)
           .limit(8);
 
@@ -107,15 +115,15 @@ async function loadDashboardData(
     supabase.from("learning_topics").select("id,area_id,slug,name,description").order("display_order", { ascending: true }),
     supabase
       .from("activity_guides")
-      .select("id,area_id,topic_id,title,objective,age_range,materials,steps,evidence_prompt,learning_areas(name),learning_topics(name)")
-      .eq("status", "published")
+      .select("id,area_id,topic_id,title,objective,age_range,materials,steps,evidence_prompt,status,learning_areas(name),learning_topics(name)")
+      .in("status", role === "admin" ? ["draft", "published", "archived"] : ["published"])
       .order("created_at", { ascending: false })
-      .limit(12),
+      .limit(100),
     supabase
       .from("resources")
-      .select("id,title,description,category,kind,source_name,audience,external_url,access_notes,learning_areas(name),learning_topics(name)")
-      .eq("status", "published")
-      .limit(12)
+      .select("id,title,description,category,kind,area_id,topic_id,source_name,audience,external_url,storage_path,access_notes,status,learning_areas(name),learning_topics(name)")
+      .in("status", role === "admin" ? ["draft", "published", "archived"] : ["published"])
+      .limit(100)
   ]);
 
   const families: FamilyRow[] =
@@ -128,19 +136,19 @@ async function loadDashboardData(
             }
             return row.families ? [row.families] : [];
           })
-          .filter(Boolean);
+          .filter((family): family is FamilyRow => Boolean(family) && family.status !== "archived");
 
   const familyIds = families.map((family) => family.id);
 
   const [{ data: studentsData }, { data: entriesData }, { data: consentsData }, { data: invitationsData }] = familyIds.length
     ? await Promise.all([
-        supabase.from("students").select("id,family_id,full_name,birth_year,stage").in("family_id", familyIds).limit(12),
+        supabase.from("students").select("id,family_id,full_name,birth_year,stage,status").in("family_id", familyIds).eq("status", "active").limit(100),
         supabase
           .from("portfolio_entries")
-          .select("id,student_id,area_id,topic_id,title,summary,observation,activity_date,evidence_kind,external_provider,privacy_notes,created_at,learning_areas(name),learning_topics(name),periods(label),portfolio_media(id)")
+          .select("id,student_id,area_id,topic_id,title,summary,observation,activity_date,evidence_kind,external_provider,privacy_notes,created_at,created_by,status,learning_areas(name),learning_topics(name),periods(label),portfolio_media(id),profiles!portfolio_entries_created_by_fkey(full_name,email)")
           .in("family_id", familyIds)
           .order("activity_date", { ascending: false })
-          .limit(20),
+          .limit(250),
         supabase
           .from("privacy_consents")
           .select("id,family_id,consent_name,consent_version,accepted,accepted_at,revoked_at")
@@ -154,6 +162,21 @@ async function loadDashboardData(
           .limit(role === "admin" ? 20 : 5)
       ])
     : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }];
+
+  const normalizedResources = await Promise.all(((resourcesData || []) as ResourceRow[]).map(async (resource) => {
+    const area = Array.isArray(resource.learning_areas) ? resource.learning_areas[0] : resource.learning_areas;
+    const topic = Array.isArray(resource.learning_topics) ? resource.learning_topics[0] : resource.learning_topics;
+    const signed = resource.storage_path
+      ? await supabase.storage.from("resource-files").createSignedUrl(resource.storage_path, 15 * 60)
+      : { data: null };
+    return {
+      id: resource.id, title: resource.title, description: resource.description || "", category: resource.category,
+      kind: resource.kind, area: area?.name || "General", area_id: resource.area_id || "",
+      topic: topic?.name || "General", topic_id: resource.topic_id || "", source_name: resource.source_name || "",
+      audience: resource.audience || "", external_url: resource.external_url || "", storage_path: resource.storage_path || "",
+      file_url: signed.data?.signedUrl || "", access_notes: resource.access_notes || "", status: resource.status
+    };
+  }));
 
   return {
     mode: "live" as const,
@@ -178,13 +201,24 @@ async function loadDashboardData(
         age_range: guide.age_range,
         materials: guide.materials || [],
         steps: guide.steps || [],
-        evidence_prompt: guide.evidence_prompt || ""
+        evidence_prompt: guide.evidence_prompt || "",
+        status: guide.status
       };
     }),
-    entries: ((entriesData || []) as EntryRow[]).map((entry) => {
+    entries: normalizeEntries((entriesData || []) as EntryRow[]).filter((entry) => entry.status === "active"),
+    archivedEntries: role === "admin" ? normalizeEntries((entriesData || []) as EntryRow[]).filter((entry) => entry.status === "archived") : [],
+    resources: normalizedResources,
+    consents: (consentsData || []) as ConsentRow[],
+    invitations: (invitationsData || []) as InvitationRow[]
+  };
+
+  function normalizeEntries(rows: EntryRow[]) {
+    return rows.map((entry) => {
       const area = Array.isArray(entry.learning_areas) ? entry.learning_areas[0] : entry.learning_areas;
       const topic = Array.isArray(entry.learning_topics) ? entry.learning_topics[0] : entry.learning_topics;
       const period = Array.isArray(entry.periods) ? entry.periods[0] : entry.periods;
+      const author = Array.isArray(entry.profiles) ? entry.profiles[0] : entry.profiles;
+      const student = ((studentsData || []) as StudentRow[]).find((item) => item.id === entry.student_id);
 
       return {
         id: entry.id,
@@ -202,28 +236,12 @@ async function loadDashboardData(
         external_provider: entry.external_provider || "",
         privacy_notes: entry.privacy_notes || "",
         media_count: entry.portfolio_media?.length || 0,
-        created_at: entry.created_at
+        created_at: entry.created_at,
+        student_name: student?.full_name || "Alumno",
+        author_name: author?.full_name || author?.email || "Usuario autorizado",
+        can_edit: entry.created_by === userId || role === "admin",
+        status: entry.status
       };
-    }),
-    resources: ((resourcesData || []) as ResourceRow[]).map((resource) => {
-      const area = Array.isArray(resource.learning_areas) ? resource.learning_areas[0] : resource.learning_areas;
-      const topic = Array.isArray(resource.learning_topics) ? resource.learning_topics[0] : resource.learning_topics;
-
-      return {
-        id: resource.id,
-        title: resource.title,
-        description: resource.description || "",
-        category: resource.category,
-        kind: resource.kind,
-        area: area?.name || "General",
-        topic: topic?.name || "General",
-        source_name: resource.source_name || "",
-        audience: resource.audience || "",
-        external_url: resource.external_url || "",
-        access_notes: resource.access_notes || ""
-      };
-    }),
-    consents: (consentsData || []) as ConsentRow[],
-    invitations: (invitationsData || []) as InvitationRow[]
-  };
+    });
+  }
 }

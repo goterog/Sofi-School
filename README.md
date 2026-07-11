@@ -38,6 +38,7 @@ La app está organizada por rutas, componentes y librerías de soporte:
 - `src/lib/demo-data.ts`: datos de vista previa cuando Supabase no está configurado.
 - `supabase/migrations`: esquema SQL, RLS, seeds iniciales y storage.
 - `docs/SECURITY.md`: notas de seguridad, privacidad y pendientes antes de producción.
+- `docs/CLOUD_WORKFLOW.md`: configuración de Supabase staging, Vercel Preview y lista de aceptación cloud.
 
 Next.js no usa un `.html` editable como una página estática tradicional. El HTML se genera desde componentes `.tsx`. Para cambios pequeños:
 
@@ -202,6 +203,8 @@ Flujo automático de trabajo:
 2. Mantener cambios nuevos en ramas `feature/...` para obtener previews automáticos.
 3. Cuando Supabase esté listo, configurar variables de entorno en Vercel.
 4. Revisar políticas de privacidad, consentimiento y backups antes de usar datos reales de menores.
+
+El procedimiento actualizado de ramas, staging, OAuth y promoción está en [`docs/CLOUD_WORKFLOW.md`](docs/CLOUD_WORKFLOW.md).
 
 Activación de Supabase:
 

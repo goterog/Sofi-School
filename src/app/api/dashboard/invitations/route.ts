@@ -1,7 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getDashboardActor, writeAuditEvent } from "@/lib/dashboard-auth";
 
 const invitationSchema = z.object({
   email: z.string().email().max(160),
@@ -17,18 +17,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "Revisa el correo y la familia." }, { status: 400 });
   }
 
-  const supabase = await createServerSupabaseClient();
-
-  if (!supabase) {
-    return NextResponse.json({ message: "Supabase no está configurado." }, { status: 503 });
+  const actor = await getDashboardActor();
+  if (actor.error || !actor.supabase || !actor.user) {
+    return NextResponse.json({ message: actor.error }, { status: actor.status });
   }
-
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ message: "Inicia sesión como admin." }, { status: 401 });
+  if (actor.role !== "admin") {
+    return NextResponse.json({ message: "Esta acción requiere rol de administrador." }, { status: 403 });
   }
 
   const normalizedEmail = parsed.data.email.trim().toLowerCase();
@@ -36,13 +30,13 @@ export async function POST(request: Request) {
     ? new Date(`${parsed.data.expiresOn}T23:59:59.000Z`).toISOString()
     : null;
 
-  const { error } = await supabase.from("invitations").insert({
+  const { error } = await actor.supabase.from("invitations").insert({
     email: normalizedEmail,
     family_id: parsed.data.familyId,
     role: "parent",
     status: "pending",
     expires_at: expiresAt,
-    invited_by: user.id
+    invited_by: actor.user.id
   });
 
   if (error) {
@@ -51,6 +45,14 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
+
+  await writeAuditEvent({
+    supabase: actor.supabase,
+    actorId: actor.user.id,
+    familyId: parsed.data.familyId,
+    eventName: "admin_invitation_created",
+    metadata: { email: normalizedEmail }
+  });
 
   revalidatePath("/dashboard");
   return NextResponse.json({ ok: true });

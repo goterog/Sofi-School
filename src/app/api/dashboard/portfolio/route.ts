@@ -1,7 +1,8 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getDashboardActor, writeAuditEvent } from "@/lib/dashboard-auth";
+import { PORTFOLIO_CONSENT_NAME, PORTFOLIO_CONSENT_VERSION, PORTFOLIO_MAX_FILES } from "@/lib/portfolio-policy";
 
 const portfolioEntrySchema = z.object({
   studentId: z.string().uuid(),
@@ -16,7 +17,8 @@ const portfolioEntrySchema = z.object({
   externalUrl: z.string().url().max(2000).optional().or(z.literal("")),
   externalProvider: z.string().max(80).optional().or(z.literal("")),
   caption: z.string().max(320).optional().or(z.literal("")),
-  privacyNotes: z.string().max(500).optional().or(z.literal(""))
+  privacyNotes: z.string().max(500).optional().or(z.literal("")),
+  fileCount: z.number().int().min(0).max(PORTFOLIO_MAX_FILES).default(0)
 });
 
 export async function POST(request: Request) {
@@ -37,21 +39,12 @@ export async function POST(request: Request) {
     }
   }
 
-  const supabase = await createServerSupabaseClient();
-
-  if (!supabase) {
-    return NextResponse.json({ message: "Supabase no está configurado." }, { status: 503 });
+  const actor = await getDashboardActor();
+  if (actor.error || !actor.supabase || !actor.user) {
+    return NextResponse.json({ message: actor.error }, { status: actor.status });
   }
 
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ message: "Inicia sesión para guardar evidencias." }, { status: 401 });
-  }
-
-  const { data: student, error: studentError } = await supabase
+  const { data: student, error: studentError } = await actor.supabase
     .from("students")
     .select("id,family_id")
     .eq("id", parsed.data.studentId)
@@ -61,7 +54,30 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "No encontramos ese alumno para tu familia." }, { status: 404 });
   }
 
-  const { data: entry, error: entryError } = await supabase
+  const { data: consent } = await actor.supabase
+    .from("privacy_consents")
+    .select("id")
+    .eq("family_id", student.family_id)
+    .eq("guardian_user_id", actor.user.id)
+    .eq("consent_name", PORTFOLIO_CONSENT_NAME)
+    .eq("consent_version", PORTFOLIO_CONSENT_VERSION)
+    .eq("accepted", true)
+    .maybeSingle();
+
+  if (!consent) {
+    return NextResponse.json(
+      {
+        code: "CONSENT_REQUIRED",
+        familyId: student.family_id,
+        consentVersion: PORTFOLIO_CONSENT_VERSION,
+        message: "Acepta el consentimiento vigente antes de publicar tu primera evidencia."
+      },
+      { status: 409 }
+    );
+  }
+
+  const hasFiles = parsed.data.fileCount > 0;
+  const { data: entry, error: entryError } = await actor.supabase
     .from("portfolio_entries")
     .insert({
       family_id: student.family_id,
@@ -76,7 +92,9 @@ export async function POST(request: Request) {
       evidence_kind: parsed.data.evidenceKind,
       external_provider: parsed.data.externalProvider || null,
       privacy_notes: parsed.data.privacyNotes || null,
-      created_by: user.id
+      created_by: actor.user.id,
+      status: hasFiles ? "uploading" : "active",
+      published_at: hasFiles ? null : new Date().toISOString()
     })
     .select("id")
     .single<{ id: string }>();
@@ -86,7 +104,7 @@ export async function POST(request: Request) {
   }
 
   if (parsed.data.externalUrl || parsed.data.caption) {
-    const { error: mediaError } = await supabase.from("portfolio_media").insert({
+    const { error: mediaError } = await actor.supabase.from("portfolio_media").insert({
       entry_id: entry.id,
       family_id: student.family_id,
       kind: toMediaKind(parsed.data.evidenceKind),
@@ -96,7 +114,7 @@ export async function POST(request: Request) {
       access_notes: parsed.data.externalUrl
         ? "Enlace externo privado. Mantener restringido a los correos autorizados."
         : null,
-      created_by: user.id
+      created_by: actor.user.id
     });
 
     if (mediaError) {
@@ -107,10 +125,18 @@ export async function POST(request: Request) {
     }
   }
 
+  await writeAuditEvent({
+    supabase: actor.supabase,
+    actorId: actor.user.id,
+    familyId: student.family_id,
+    eventName: hasFiles ? "portfolio_upload_started" : "portfolio_entry_published",
+    metadata: { entryId: entry.id, studentId: student.id, fileCount: parsed.data.fileCount }
+  });
+
   revalidatePath("/dashboard");
   revalidatePath(`/dashboard/alumnos/${student.id}`);
 
-  return NextResponse.json({ id: entry.id });
+  return NextResponse.json({ id: entry.id, familyId: student.family_id, status: hasFiles ? "uploading" : "active" });
 }
 
 function toMediaKind(kind: z.infer<typeof portfolioEntrySchema>["evidenceKind"]) {
