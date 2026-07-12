@@ -18,7 +18,7 @@ type StudentOption = { id: string; family_id: string; full_name: string };
 type AreaOption = { id: string; name: string };
 type TopicOption = { id: string; area_id: string; name: string };
 
-type ModalStep = "select-student" | "checking-consent" | "consent" | "form";
+type ModalStep = "select-student" | "consent" | "form";
 
 export function PortfolioEntryForm({ students, areas, topics, configured, open, onClose }: {
   students: StudentOption[]; areas: AreaOption[]; topics: TopicOption[]; configured: boolean;
@@ -26,15 +26,15 @@ export function PortfolioEntryForm({ students, areas, topics, configured, open, 
 }) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
-  const [selectedAreaId, setSelectedAreaId] = useState(areas[0]?.id || "");
+  const [selectedAreaId, setSelectedAreaId] = useState("");
   const [files, setFiles] = useState<File[]>([]);
-  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">(students.length === 1 ? "loading" : "idle");
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
   const [progress, setProgress] = useState(0);
   const [consentFamilyId, setConsentFamilyId] = useState("");
   const [consentChecked, setConsentChecked] = useState(false);
   const [selectedStudentId, setSelectedStudentId] = useState(students.length === 1 ? students[0].id : "");
-  const [step, setStep] = useState<ModalStep>(students.length === 1 ? "checking-consent" : "select-student");
+  const [step, setStep] = useState<ModalStep>(students.length === 1 ? "form" : "select-student");
   const filteredTopics = useMemo(() => topics.filter((topic) => !selectedAreaId || topic.area_id === selectedAreaId), [selectedAreaId, topics]);
   const busy = status === "loading";
   const selectedStudent = students.find((student) => student.id === selectedStudentId);
@@ -47,9 +47,10 @@ export function PortfolioEntryForm({ students, areas, topics, configured, open, 
       .then(({ response, result }) => {
         if (!active) return;
         if (!response.ok) {
-          setStatus("error"); setMessage(result.message || "No pudimos comprobar el consentimiento."); setStep("select-student"); return;
+          setMessage(result.message || "No pudimos comprobar el consentimiento."); return;
         }
-        setConsentFamilyId(result.familyId || ""); setStatus("idle"); setStep(result.required ? "consent" : "form");
+        setConsentFamilyId(result.familyId || "");
+        if (result.required) setStep("consent");
       });
     return () => { active = false; };
   }, [students]);
@@ -103,15 +104,15 @@ export function PortfolioEntryForm({ students, areas, topics, configured, open, 
   }
 
   async function prepareStudent(studentId: string) {
-    setSelectedStudentId(studentId); setStep("checking-consent"); setStatus("loading"); setMessage("");
+    setSelectedStudentId(studentId); setStep("form"); setMessage("");
     const response = await fetch(`/api/privacy/consents?studentId=${encodeURIComponent(studentId)}`);
     const result = await response.json().catch(() => ({}));
     if (!response.ok) {
       setStatus("error"); setMessage(result.message || "No pudimos comprobar el consentimiento.");
       setStep("select-student"); return;
     }
-    setConsentFamilyId(result.familyId || ""); setStatus("idle");
-    setStep(result.required ? "consent" : "form");
+    setConsentFamilyId(result.familyId || "");
+    if (result.required) setStep("consent");
   }
 
   async function acceptConsent() {
@@ -144,7 +145,7 @@ export function PortfolioEntryForm({ students, areas, topics, configured, open, 
     const response = await fetch("/api/dashboard/portfolio", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     const result = await response.json().catch(() => ({}));
     if (response.status === 409 && result.code === "CONSENT_REQUIRED") {
-      setConsentFamilyId(result.familyId); setStatus("idle"); setProgress(0); return;
+      setConsentFamilyId(result.familyId); setStatus("idle"); setProgress(0); setStep("consent"); return;
     }
     if (!response.ok) {
       setStatus("error"); setMessage(result.message || "No pudimos crear la evidencia."); setProgress(0); return;
@@ -174,7 +175,7 @@ export function PortfolioEntryForm({ students, areas, topics, configured, open, 
     }
 
     setProgress(100); setStatus("success"); setMessage("Evidencia publicada de forma privada.");
-    form.reset(); setFiles([]); setSelectedAreaId(areas[0]?.id || ""); router.refresh();
+    form.reset(); setFiles([]); setSelectedAreaId(""); router.refresh();
     window.setTimeout(() => onClose(), 900);
   }
 
@@ -196,8 +197,6 @@ export function PortfolioEntryForm({ students, areas, topics, configured, open, 
             {message ? <p className="mt-4 rounded-md bg-coral/12 px-3 py-2 text-sm text-coral">{message}</p> : null}
             <div className="mt-6 flex gap-3"><button type="button" disabled={!selectedStudentId} onClick={() => prepareStudent(selectedStudentId)} className="focus-ring rounded-md bg-forest px-5 py-3 font-semibold text-white disabled:opacity-50">Continuar</button><button type="button" onClick={requestClose} className="focus-ring rounded-md border border-ink/12 px-5 py-3 font-semibold">Cancelar</button></div>
           </div>
-        ) : step === "checking-consent" ? (
-          <div className="flex min-h-64 flex-col items-center justify-center p-8 text-center"><ShieldCheck className="h-10 w-10 animate-pulse text-forest" /><p className="mt-4 font-semibold">Comprobando acceso y consentimiento…</p></div>
         ) : step === "consent" ? (
           <div className="p-6 sm:p-8">
             <ShieldCheck className="h-10 w-10 text-forest" />
@@ -210,7 +209,15 @@ export function PortfolioEntryForm({ students, areas, topics, configured, open, 
         ) : (
           <form ref={formRef} onSubmit={handleSubmit} className="p-5 sm:p-7">
             <input type="hidden" name="studentId" value={selectedStudentId} />
-            <div className="grid gap-4 md:grid-cols-2">
+            <div onDragOver={(event) => event.preventDefault()} onDrop={handleDrop}>
+              <label className="focus-within:ring-2 focus-within:ring-teal flex cursor-pointer flex-col items-center rounded-xl border-2 border-dashed border-teal/30 bg-cloud px-5 py-8 text-center transition hover:border-teal">
+                <UploadCloud className="h-9 w-9 text-teal" /><span className="mt-3 font-semibold">Arrastra fotos o PDF, o selecciónalos</span><span className="mt-1 text-sm text-ink/55">Hasta 10 archivos de 10 MB · JPG, PNG, WebP y PDF</span>
+                <input type="file" multiple accept={PORTFOLIO_ALLOWED_MIME_TYPES.join(",")} className="sr-only" onChange={(event) => addFiles(Array.from(event.target.files || []))} disabled={disabled} />
+              </label>
+              {files.length ? <div className="mt-3 grid gap-2 sm:grid-cols-2">{files.map((file, index) => <div key={`${file.name}-${index}`} className="flex items-center gap-3 rounded-md border border-ink/8 px-3 py-2 text-sm"><FileText className="h-4 w-4 text-teal" /><span className="min-w-0 flex-1 truncate">{file.name}</span><span className="text-xs text-ink/48">{(file.size / 1024 / 1024).toFixed(1)} MB</span><button type="button" onClick={() => setFiles((all) => all.filter((_, i) => i !== index))} aria-label={`Quitar ${file.name}`}><X className="h-4 w-4" /></button></div>)}</div> : null}
+            </div>
+
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
               <Field label="Alumno"><div className="flex min-h-12 items-center justify-between rounded-md border border-ink/12 bg-cloud px-3"><span>{selectedStudent?.full_name || "Alumno"}</span>{students.length > 1 ? <button type="button" onClick={() => setStep("select-student")} className="text-xs font-bold text-teal">Cambiar</button> : null}</div></Field>
               <Field label="Fecha"><input name="activityDate" type="date" required defaultValue={todayLocal()} disabled={disabled} className="input" /></Field>
               <Field label="Área"><select name="areaId" value={selectedAreaId} onChange={(e) => setSelectedAreaId(e.target.value)} disabled={disabled} className="input"><option value="">Sin área</option>{areas.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
@@ -219,14 +226,6 @@ export function PortfolioEntryForm({ students, areas, topics, configured, open, 
               <Field label="Enlace privado externo" wide><div className="relative"><LinkIcon className="absolute left-3 top-3.5 h-4 w-4 text-ink/42" /><input name="externalUrl" type="url" disabled={disabled} className="input pl-10" placeholder="https://drive.google.com/..." /></div></Field>
               <Field label="Resumen" wide><textarea name="summary" rows={3} maxLength={1200} disabled={disabled} className="input" placeholder="Qué hizo, qué observó y qué logró." /></Field>
               <Field label="Observación del adulto" wide><textarea name="observation" rows={3} maxLength={2400} disabled={disabled} className="input" /></Field>
-            </div>
-
-            <div className="mt-5" onDragOver={(event) => event.preventDefault()} onDrop={handleDrop}>
-              <label className="focus-within:ring-2 focus-within:ring-teal flex cursor-pointer flex-col items-center rounded-xl border-2 border-dashed border-teal/30 bg-cloud px-5 py-8 text-center transition hover:border-teal">
-                <UploadCloud className="h-9 w-9 text-teal" /><span className="mt-3 font-semibold">Arrastra fotos o PDF, o selecciónalos</span><span className="mt-1 text-sm text-ink/55">Hasta 10 archivos de 10 MB · JPG, PNG, WebP y PDF</span>
-                <input type="file" multiple accept={PORTFOLIO_ALLOWED_MIME_TYPES.join(",")} className="sr-only" onChange={(event) => addFiles(Array.from(event.target.files || []))} disabled={disabled} />
-              </label>
-              {files.length ? <div className="mt-3 grid gap-2 sm:grid-cols-2">{files.map((file, index) => <div key={`${file.name}-${index}`} className="flex items-center gap-3 rounded-md border border-ink/8 px-3 py-2 text-sm"><FileText className="h-4 w-4 text-teal" /><span className="min-w-0 flex-1 truncate">{file.name}</span><span className="text-xs text-ink/48">{(file.size / 1024 / 1024).toFixed(1)} MB</span><button type="button" onClick={() => setFiles((all) => all.filter((_, i) => i !== index))} aria-label={`Quitar ${file.name}`}><X className="h-4 w-4" /></button></div>)}</div> : null}
             </div>
 
             {busy ? <div className="mt-5"><div className="h-2 overflow-hidden rounded-full bg-cloud"><div className="h-full bg-teal transition-all" style={{ width: `${Math.max(progress, 8)}%` }} /></div><p className="mt-2 text-sm text-ink/58">{progress < 85 ? "Subiendo archivos privados…" : "Finalizando publicación…"}</p></div> : null}

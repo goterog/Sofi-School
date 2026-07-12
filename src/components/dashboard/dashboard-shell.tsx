@@ -64,8 +64,7 @@ export function DashboardShell({ data, configured }: { data: DemoDashboardData |
     </header>
     <section className="mx-auto max-w-[1500px] px-4 py-5 sm:px-8 lg:px-10">
         <section id="portafolio" className="scroll-mt-20 pt-3">
-          <SectionTitle icon={<Camera className="h-6 w-6 text-coral" />} title="Portafolio" />
-          <div className="mt-5"><PortfolioTimeline entries={entries} areas={data.areas} topics={data.topics} createAction={<button onClick={() => setEvidenceOpen(true)} disabled={!configured || !data.students.length} className="focus-ring inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md bg-forest px-4 py-3 font-semibold text-white disabled:opacity-50"><Plus className="h-4 w-4" />Nueva evidencia</button>} /></div>
+          <PortfolioTimeline entries={entries} areas={data.areas} topics={data.topics} toolbarLead={<div className="flex items-center gap-2 pr-1"><Camera className="h-5 w-5 text-coral" /><h1 className="text-lg font-semibold">Portafolio</h1></div>} createAction={<button onClick={() => setEvidenceOpen(true)} disabled={!configured || !data.students.length} className="focus-ring inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md bg-forest px-4 py-3 font-semibold text-white disabled:opacity-50"><Plus className="h-4 w-4" />Nueva evidencia</button>} />
           {data.role === "admin" && archivedEntries.length ? <details className="mt-5 rounded-lg border border-coral/15 bg-white p-4"><summary className="cursor-pointer font-semibold text-coral">Archivo administrativo ({archivedEntries.length})</summary><div className="mt-4"><PortfolioTimeline entries={archivedEntries} areas={data.areas} topics={data.topics} showArchive /></div></details> : null}
         </section>
 
