@@ -2,7 +2,7 @@
 
 import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, LinkIcon, Save, ShieldCheck, UploadCloud, X } from "lucide-react";
+import { FileText, LinkIcon, Save, ShieldCheck, UploadCloud, UserRound, X } from "lucide-react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 import {
   PORTFOLIO_ALLOWED_MIME_TYPES,
@@ -18,11 +18,7 @@ type StudentOption = { id: string; family_id: string; full_name: string };
 type AreaOption = { id: string; name: string };
 type TopicOption = { id: string; area_id: string; name: string };
 
-const evidenceKinds = [
-  { value: "note", label: "Nota" }, { value: "photo", label: "Foto" },
-  { value: "video", label: "Video externo" }, { value: "document", label: "Documento" },
-  { value: "link", label: "Enlace" }
-] as const;
+type ModalStep = "select-student" | "checking-consent" | "consent" | "form";
 
 export function PortfolioEntryForm({ students, areas, topics, configured, open, onClose }: {
   students: StudentOption[]; areas: AreaOption[]; topics: TopicOption[]; configured: boolean;
@@ -32,13 +28,31 @@ export function PortfolioEntryForm({ students, areas, topics, configured, open, 
   const formRef = useRef<HTMLFormElement>(null);
   const [selectedAreaId, setSelectedAreaId] = useState(areas[0]?.id || "");
   const [files, setFiles] = useState<File[]>([]);
-  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">(students.length === 1 ? "loading" : "idle");
   const [message, setMessage] = useState("");
   const [progress, setProgress] = useState(0);
   const [consentFamilyId, setConsentFamilyId] = useState("");
   const [consentChecked, setConsentChecked] = useState(false);
+  const [selectedStudentId, setSelectedStudentId] = useState(students.length === 1 ? students[0].id : "");
+  const [step, setStep] = useState<ModalStep>(students.length === 1 ? "checking-consent" : "select-student");
   const filteredTopics = useMemo(() => topics.filter((topic) => !selectedAreaId || topic.area_id === selectedAreaId), [selectedAreaId, topics]);
   const busy = status === "loading";
+  const selectedStudent = students.find((student) => student.id === selectedStudentId);
+
+  useEffect(() => {
+    if (students.length !== 1) return;
+    let active = true;
+    void fetch(`/api/privacy/consents?studentId=${encodeURIComponent(students[0].id)}`)
+      .then(async (response) => ({ response, result: await response.json().catch(() => ({})) }))
+      .then(({ response, result }) => {
+        if (!active) return;
+        if (!response.ok) {
+          setStatus("error"); setMessage(result.message || "No pudimos comprobar el consentimiento."); setStep("select-student"); return;
+        }
+        setConsentFamilyId(result.familyId || ""); setStatus("idle"); setStep(result.required ? "consent" : "form");
+      });
+    return () => { active = false; };
+  }, [students]);
 
   useEffect(() => {
     if (!open) return;
@@ -88,6 +102,18 @@ export function PortfolioEntryForm({ students, areas, topics, configured, open, 
     addFiles(Array.from(event.dataTransfer.files));
   }
 
+  async function prepareStudent(studentId: string) {
+    setSelectedStudentId(studentId); setStep("checking-consent"); setStatus("loading"); setMessage("");
+    const response = await fetch(`/api/privacy/consents?studentId=${encodeURIComponent(studentId)}`);
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setStatus("error"); setMessage(result.message || "No pudimos comprobar el consentimiento.");
+      setStep("select-student"); return;
+    }
+    setConsentFamilyId(result.familyId || ""); setStatus("idle");
+    setStep(result.required ? "consent" : "form");
+  }
+
   async function acceptConsent() {
     if (!consentChecked) return;
     setStatus("loading");
@@ -99,9 +125,7 @@ export function PortfolioEntryForm({ students, areas, topics, configured, open, 
       const result = await response.json().catch(() => ({}));
       setStatus("error"); setMessage(result.message || "No pudimos registrar el consentimiento."); return;
     }
-    setConsentFamilyId("");
-    setStatus("idle");
-    formRef.current?.requestSubmit();
+    setStatus("idle"); setStep("form");
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -112,9 +136,8 @@ export function PortfolioEntryForm({ students, areas, topics, configured, open, 
       studentId: String(formData.get("studentId") || ""), areaId: String(formData.get("areaId") || ""),
       topicId: String(formData.get("topicId") || ""), title: String(formData.get("title") || ""),
       summary: String(formData.get("summary") || ""), observation: String(formData.get("observation") || ""),
-      activityDate: String(formData.get("activityDate") || ""), evidenceKind: String(formData.get("evidenceKind") || "note"),
-      externalUrl: String(formData.get("externalUrl") || ""), externalProvider: String(formData.get("externalProvider") || ""),
-      caption: String(formData.get("caption") || ""), privacyNotes: String(formData.get("privacyNotes") || ""), fileCount: files.length
+      activityDate: String(formData.get("activityDate") || ""), externalUrl: String(formData.get("externalUrl") || ""),
+      fileMimeTypes: files.map((file) => file.type)
     };
 
     setStatus("loading"); setMessage(""); setProgress(2);
@@ -164,29 +187,38 @@ export function PortfolioEntryForm({ students, areas, topics, configured, open, 
           <button type="button" onClick={requestClose} className="focus-ring rounded-md p-2 hover:bg-cloud" aria-label="Cerrar"><X className="h-5 w-5" /></button>
         </div>
 
-        {consentFamilyId ? (
+        {step === "select-student" ? (
+          <div className="p-6 sm:p-8">
+            <UserRound className="h-10 w-10 text-teal" />
+            <h3 className="mt-4 text-2xl font-semibold">¿De quién es esta evidencia?</h3>
+            <p className="mt-2 text-ink/60">Selecciona al alumno antes de comenzar la captura.</p>
+            <label className="mt-6 grid max-w-lg gap-2 text-sm font-semibold">Alumno<select value={selectedStudentId} onChange={(event) => setSelectedStudentId(event.target.value)} className="input"><option value="">Selecciona un alumno</option>{students.map((student) => <option key={student.id} value={student.id}>{student.full_name}</option>)}</select></label>
+            {message ? <p className="mt-4 rounded-md bg-coral/12 px-3 py-2 text-sm text-coral">{message}</p> : null}
+            <div className="mt-6 flex gap-3"><button type="button" disabled={!selectedStudentId} onClick={() => prepareStudent(selectedStudentId)} className="focus-ring rounded-md bg-forest px-5 py-3 font-semibold text-white disabled:opacity-50">Continuar</button><button type="button" onClick={requestClose} className="focus-ring rounded-md border border-ink/12 px-5 py-3 font-semibold">Cancelar</button></div>
+          </div>
+        ) : step === "checking-consent" ? (
+          <div className="flex min-h-64 flex-col items-center justify-center p-8 text-center"><ShieldCheck className="h-10 w-10 animate-pulse text-forest" /><p className="mt-4 font-semibold">Comprobando acceso y consentimiento…</p></div>
+        ) : step === "consent" ? (
           <div className="p-6 sm:p-8">
             <ShieldCheck className="h-10 w-10 text-forest" />
             <h3 className="mt-4 text-2xl font-semibold">Consentimiento previo</h3>
             <p className="mt-3 max-w-2xl leading-7 text-ink/68">Antes de tu primera publicación para esta familia, debes aceptar el registro y consulta privada de evidencias educativas que puedan incluir imagen, voz o trabajos del menor. El acceso queda restringido a usuarios autorizados.</p>
             <label className="mt-6 flex items-start gap-3 rounded-lg border border-forest/20 bg-forest/5 p-4 text-sm leading-6"><input type="checkbox" checked={consentChecked} onChange={(event) => setConsentChecked(event.target.checked)} className="mt-1 h-4 w-4 accent-forest" /><span>Acepto el consentimiento versión {PORTFOLIO_CONSENT_VERSION} y confirmo que comprendo el tratamiento privado de las evidencias.</span></label>
-            <div className="mt-6 flex flex-col gap-3 sm:flex-row"><button type="button" disabled={!consentChecked || busy} onClick={acceptConsent} className="focus-ring rounded-md bg-forest px-5 py-3 font-semibold text-white disabled:opacity-50">Aceptar y continuar</button><button type="button" onClick={() => setConsentFamilyId("")} className="focus-ring rounded-md border border-ink/12 px-5 py-3 font-semibold">Volver al formulario</button></div>
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row"><button type="button" disabled={!consentChecked || busy} onClick={acceptConsent} className="focus-ring rounded-md bg-forest px-5 py-3 font-semibold text-white disabled:opacity-50">Aceptar y comenzar</button><button type="button" onClick={() => students.length > 1 ? setStep("select-student") : requestClose()} className="focus-ring rounded-md border border-ink/12 px-5 py-3 font-semibold">{students.length > 1 ? "Cambiar alumno" : "Cancelar"}</button></div>
+            {message ? <p className="mt-4 rounded-md bg-coral/12 px-3 py-2 text-sm text-coral">{message}</p> : null}
           </div>
         ) : (
           <form ref={formRef} onSubmit={handleSubmit} className="p-5 sm:p-7">
+            <input type="hidden" name="studentId" value={selectedStudentId} />
             <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Alumno"><select name="studentId" required disabled={disabled} className="input"><option value="">Selecciona un alumno</option>{students.map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}</select></Field>
-              <Field label="Fecha"><input name="activityDate" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} disabled={disabled} className="input" /></Field>
+              <Field label="Alumno"><div className="flex min-h-12 items-center justify-between rounded-md border border-ink/12 bg-cloud px-3"><span>{selectedStudent?.full_name || "Alumno"}</span>{students.length > 1 ? <button type="button" onClick={() => setStep("select-student")} className="text-xs font-bold text-teal">Cambiar</button> : null}</div></Field>
+              <Field label="Fecha"><input name="activityDate" type="date" required defaultValue={todayLocal()} disabled={disabled} className="input" /></Field>
               <Field label="Área"><select name="areaId" value={selectedAreaId} onChange={(e) => setSelectedAreaId(e.target.value)} disabled={disabled} className="input"><option value="">Sin área</option>{areas.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
               <Field label="Submateria"><select name="topicId" disabled={disabled} className="input"><option value="">Sin submateria</option>{filteredTopics.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></Field>
               <Field label="Título" wide><input name="title" required maxLength={160} disabled={disabled} className="input" placeholder="Observa el crecimiento de una semilla" /></Field>
-              <Field label="Tipo"><select name="evidenceKind" disabled={disabled} className="input">{evidenceKinds.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}</select></Field>
-              <Field label="Proveedor externo"><select name="externalProvider" disabled={disabled} className="input"><option value="">Sin proveedor</option><option>Google Drive</option><option>OneDrive</option><option>iCloud</option><option>Otro</option></select></Field>
               <Field label="Enlace privado externo" wide><div className="relative"><LinkIcon className="absolute left-3 top-3.5 h-4 w-4 text-ink/42" /><input name="externalUrl" type="url" disabled={disabled} className="input pl-10" placeholder="https://drive.google.com/..." /></div></Field>
               <Field label="Resumen" wide><textarea name="summary" rows={3} maxLength={1200} disabled={disabled} className="input" placeholder="Qué hizo, qué observó y qué logró." /></Field>
               <Field label="Observación del adulto" wide><textarea name="observation" rows={3} maxLength={2400} disabled={disabled} className="input" /></Field>
-              <Field label="Pie o nota"><input name="caption" maxLength={320} disabled={disabled} className="input" /></Field>
-              <Field label="Privacidad"><input name="privacyNotes" maxLength={500} disabled={disabled} className="input" placeholder="Solo correos autorizados" /></Field>
             </div>
 
             <div className="mt-5" onDragOver={(event) => event.preventDefault()} onDrop={handleDrop}>
@@ -209,4 +241,9 @@ export function PortfolioEntryForm({ students, areas, topics, configured, open, 
 
 function Field({ label, wide, children }: { label: string; wide?: boolean; children: React.ReactNode }) {
   return <label className={`grid gap-2 text-sm font-semibold ${wide ? "md:col-span-2" : ""}`}>{label}{children}</label>;
+}
+
+function todayLocal() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }

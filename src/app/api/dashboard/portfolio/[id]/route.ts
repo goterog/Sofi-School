@@ -26,8 +26,7 @@ const patchSchema = z.discriminatedUnion("action", [
     observation: z.string().max(2400).optional().or(z.literal("")),
     activityDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     areaId: z.string().uuid().optional().or(z.literal("")),
-    topicId: z.string().uuid().optional().or(z.literal("")),
-    privacyNotes: z.string().max(500).optional().or(z.literal(""))
+    topicId: z.string().uuid().optional().or(z.literal(""))
   }),
   z.object({ action: z.literal("archive") }),
   z.object({ action: z.literal("remove-media"), mediaId: z.string().uuid() })
@@ -142,8 +141,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       observation: parsed.data.observation || null,
       activity_date: parsed.data.activityDate,
       area_id: parsed.data.areaId || null,
-      topic_id: parsed.data.topicId || null,
-      privacy_notes: parsed.data.privacyNotes || null
+      topic_id: parsed.data.topicId || null
     }).eq("id", entry.id);
 
     if (error) {

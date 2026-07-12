@@ -13,6 +13,40 @@ const consentSchema = z.object({
   notes: z.string().max(500).optional().or(z.literal(""))
 });
 
+export async function GET(request: Request) {
+  const studentId = new URL(request.url).searchParams.get("studentId");
+  if (!studentId || !z.string().uuid().safeParse(studentId).success) {
+    return NextResponse.json({ message: "Selecciona un alumno válido." }, { status: 400 });
+  }
+
+  const actor = await getDashboardActor();
+  if (actor.error || !actor.supabase || !actor.user) {
+    return NextResponse.json({ message: actor.error }, { status: actor.status });
+  }
+
+  const { data: student } = await actor.supabase
+    .from("students")
+    .select("id,family_id")
+    .eq("id", studentId)
+    .maybeSingle<{ id: string; family_id: string }>();
+
+  if (!student) {
+    return NextResponse.json({ message: "No tienes acceso a ese alumno." }, { status: 403 });
+  }
+
+  const { data: consent } = await actor.supabase
+    .from("privacy_consents")
+    .select("id")
+    .eq("family_id", student.family_id)
+    .eq("guardian_user_id", actor.user.id)
+    .eq("consent_name", PORTFOLIO_CONSENT_NAME)
+    .eq("consent_version", PORTFOLIO_CONSENT_VERSION)
+    .eq("accepted", true)
+    .maybeSingle();
+
+  return NextResponse.json({ required: !consent, familyId: student.family_id, consentVersion: PORTFOLIO_CONSENT_VERSION });
+}
+
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const parsed = consentSchema.safeParse(body);

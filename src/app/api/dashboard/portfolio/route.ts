@@ -2,7 +2,14 @@ import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDashboardActor, writeAuditEvent } from "@/lib/dashboard-auth";
-import { PORTFOLIO_CONSENT_NAME, PORTFOLIO_CONSENT_VERSION, PORTFOLIO_MAX_FILES } from "@/lib/portfolio-policy";
+import {
+  classifyEvidence,
+  detectExternalProvider,
+  PORTFOLIO_ALLOWED_MIME_TYPES,
+  PORTFOLIO_CONSENT_NAME,
+  PORTFOLIO_CONSENT_VERSION,
+  PORTFOLIO_MAX_FILES
+} from "@/lib/portfolio-policy";
 
 const portfolioEntrySchema = z.object({
   studentId: z.string().uuid(),
@@ -13,12 +20,8 @@ const portfolioEntrySchema = z.object({
   summary: z.string().max(1200).optional().or(z.literal("")),
   observation: z.string().max(2400).optional().or(z.literal("")),
   activityDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  evidenceKind: z.enum(["note", "photo", "video", "document", "link"]),
   externalUrl: z.string().url().max(2000).optional().or(z.literal("")),
-  externalProvider: z.string().max(80).optional().or(z.literal("")),
-  caption: z.string().max(320).optional().or(z.literal("")),
-  privacyNotes: z.string().max(500).optional().or(z.literal("")),
-  fileCount: z.number().int().min(0).max(PORTFOLIO_MAX_FILES).default(0)
+  fileMimeTypes: z.array(z.enum(PORTFOLIO_ALLOWED_MIME_TYPES)).max(PORTFOLIO_MAX_FILES).default([])
 });
 
 export async function POST(request: Request) {
@@ -76,7 +79,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const hasFiles = parsed.data.fileCount > 0;
+  const hasFiles = parsed.data.fileMimeTypes.length > 0;
+  const evidenceKind = classifyEvidence({ mimeTypes: parsed.data.fileMimeTypes, externalUrl: parsed.data.externalUrl });
+  const externalProvider = detectExternalProvider(parsed.data.externalUrl || "");
   const { data: entry, error: entryError } = await actor.supabase
     .from("portfolio_entries")
     .insert({
@@ -89,9 +94,9 @@ export async function POST(request: Request) {
       summary: parsed.data.summary || null,
       observation: parsed.data.observation || null,
       activity_date: parsed.data.activityDate,
-      evidence_kind: parsed.data.evidenceKind,
-      external_provider: parsed.data.externalProvider || null,
-      privacy_notes: parsed.data.privacyNotes || null,
+      evidence_kind: evidenceKind,
+      external_provider: externalProvider || null,
+      privacy_notes: null,
       created_by: actor.user.id,
       status: hasFiles ? "uploading" : "active",
       published_at: hasFiles ? null : new Date().toISOString()
@@ -103,14 +108,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "No pudimos guardar la evidencia." }, { status: 500 });
   }
 
-  if (parsed.data.externalUrl || parsed.data.caption) {
+  if (parsed.data.externalUrl) {
     const { error: mediaError } = await actor.supabase.from("portfolio_media").insert({
       entry_id: entry.id,
       family_id: student.family_id,
-      kind: toMediaKind(parsed.data.evidenceKind),
+      kind: evidenceKind === "video" ? "external_video" : "document",
       external_url: parsed.data.externalUrl || null,
-      external_provider: parsed.data.externalProvider || null,
-      caption: parsed.data.caption || null,
+      external_provider: externalProvider || null,
+      caption: null,
       access_notes: parsed.data.externalUrl
         ? "Enlace externo privado. Mantener restringido a los correos autorizados."
         : null,
@@ -130,27 +135,11 @@ export async function POST(request: Request) {
     actorId: actor.user.id,
     familyId: student.family_id,
     eventName: hasFiles ? "portfolio_upload_started" : "portfolio_entry_published",
-    metadata: { entryId: entry.id, studentId: student.id, fileCount: parsed.data.fileCount }
+    metadata: { entryId: entry.id, studentId: student.id, fileCount: parsed.data.fileMimeTypes.length, evidenceKind }
   });
 
   revalidatePath("/dashboard");
   revalidatePath(`/dashboard/alumnos/${student.id}`);
 
   return NextResponse.json({ id: entry.id, familyId: student.family_id, status: hasFiles ? "uploading" : "active" });
-}
-
-function toMediaKind(kind: z.infer<typeof portfolioEntrySchema>["evidenceKind"]) {
-  if (kind === "photo") {
-    return "image";
-  }
-
-  if (kind === "video") {
-    return "external_video";
-  }
-
-  if (kind === "document" || kind === "link") {
-    return "document";
-  }
-
-  return "note";
 }

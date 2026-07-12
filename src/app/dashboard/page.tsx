@@ -90,8 +90,9 @@ export default async function DashboardPage() {
   }
 
   const data = await loadDashboardData(session.supabase, session.profile?.role || "parent", session.user.id, session.profile?.full_name || session.user.email || "Familia");
+  const metadata = session.user.user_metadata || {};
 
-  return <DashboardShell data={data} configured />;
+  return <DashboardShell data={{ ...data, profileEmail: session.user.email || "", avatarUrl: String(metadata.avatar_url || metadata.picture || "") }} configured />;
 }
 
 async function loadDashboardData(
