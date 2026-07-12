@@ -14,8 +14,8 @@ export type PortfolioItem = {
 type MediaItem = { id: string; kind: string; signedUrl: string; original_name: string | null; mime_type: string | null; caption: string | null; external_provider: string | null };
 const labels = { note: "Nota", photo: "Foto", video: "Video", document: "Documento", link: "Enlace", mixed: "Multimedia" };
 
-export function PortfolioTimeline({ entries, areas, topics, showArchive = false }: {
-  entries: PortfolioItem[]; areas: Array<{ id: string; name: string }>; topics: Array<{ id: string; area_id: string; name: string }>; showArchive?: boolean;
+export function PortfolioTimeline({ entries, areas, topics, showArchive = false, createAction }: {
+  entries: PortfolioItem[]; areas: Array<{ id: string; name: string }>; topics: Array<{ id: string; area_id: string; name: string }>; showArchive?: boolean; createAction?: React.ReactNode;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -30,14 +30,15 @@ export function PortfolioTimeline({ entries, areas, topics, showArchive = false 
 
   return (
     <div>
-      <div className="grid gap-3 rounded-lg border border-ink/8 bg-white p-4 shadow-line md:grid-cols-[1fr_180px_160px]">
+      <div className={`grid gap-3 rounded-lg border border-ink/8 bg-white p-4 shadow-line ${createAction ? "md:grid-cols-[auto_1fr_180px_160px]" : "md:grid-cols-[1fr_180px_160px]"}`}>
+        {createAction}
         <label className="relative"><Search className="absolute left-3 top-3.5 h-4 w-4 text-ink/42" /><span className="sr-only">Buscar</span><input value={query} onChange={(e) => { setQuery(e.target.value); setVisible(6); }} className="input pl-10" placeholder="Buscar evidencia, alumno o área" /></label>
         <select value={student} onChange={(e) => { setStudent(e.target.value); setVisible(6); }} className="input" aria-label="Filtrar por alumno"><option value="">Todos los alumnos</option>{students.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
         <select value={kind} onChange={(e) => { setKind(e.target.value); setVisible(6); }} className="input" aria-label="Filtrar por tipo"><option value="">Todos los tipos</option>{Object.entries(labels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
       </div>
-      <div className="mt-4 grid gap-4">
+      <div className="mt-4 grid gap-4 xl:grid-cols-2">
         {filtered.slice(0, visible).map((entry) => <EvidenceCard key={entry.id} entry={entry} areas={areas} topics={topics} onChanged={() => router.refresh()} archived={showArchive} />)}
-        {!filtered.length ? <div className="rounded-lg border border-dashed border-ink/15 bg-white p-10 text-center text-ink/55">No hay publicaciones que coincidan con los filtros.</div> : null}
+        {!filtered.length ? <div className="rounded-lg border border-dashed border-ink/15 bg-white p-10 text-center text-ink/55 xl:col-span-2">No hay publicaciones que coincidan con los filtros.</div> : null}
       </div>
       {visible < filtered.length ? <button type="button" onClick={() => setVisible((value) => value + 6)} className="focus-ring mx-auto mt-5 flex items-center gap-2 rounded-md border border-ink/12 bg-white px-5 py-3 font-semibold text-forest"><ChevronDown className="h-4 w-4" />Mostrar más</button> : null}
     </div>
