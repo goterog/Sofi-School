@@ -46,13 +46,22 @@ export function DashboardShell({ data, configured }: { data: DemoDashboardData |
     router.push("/login"); router.refresh();
   }
 
+  function navigateToSection(event: React.MouseEvent<HTMLAnchorElement>, href: string) {
+    event.preventDefault();
+    setMobileOpen(false);
+    window.requestAnimationFrame(() => {
+      document.querySelector(href)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      window.history.replaceState(null, "", href);
+    });
+  }
+
   return <main className="min-h-screen bg-cloud text-ink">
     <header className="sticky top-0 z-40 border-b border-ink/8 bg-white/80 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-[1500px] items-center gap-3 px-4 sm:px-6 lg:px-10">
         <Link href="/" className="focus-ring flex shrink-0 items-center gap-2 rounded-md text-forest"><span className="grid h-9 w-9 place-items-center rounded-lg bg-forest text-white"><Home className="h-5 w-5" /></span><span className="hidden leading-tight sm:block"><strong className="block text-sm">Sofi School</strong><span className="block text-xs text-ink/50">Dashboard</span></span></Link>
-        <nav className="mx-auto hidden items-center gap-1 md:flex" aria-label="Secciones principales">{navItems.slice(0, 3).map((item) => <a key={item.href} href={item.href} className="focus-ring rounded-md px-4 py-2 text-sm font-semibold text-ink/65 transition hover:bg-forest/8 hover:text-forest">{item.label}</a>)}</nav>
+        <nav className="mx-auto hidden items-center gap-1 md:flex" aria-label="Secciones principales">{navItems.slice(0, 3).map((item) => <a key={item.href} href={item.href} onClick={(event) => navigateToSection(event, item.href)} className="focus-ring rounded-md px-4 py-2 text-sm font-semibold text-ink/65 transition hover:bg-forest/8 hover:text-forest">{item.label}</a>)}</nav>
         <div className="relative ml-auto flex items-center gap-1 md:ml-0">
-          <a href="#configuracion" className="focus-ring rounded-full p-2 text-ink/62 hover:bg-cloud hover:text-forest" aria-label="Configuración"><Settings className="h-5 w-5" /></a>
+          <a href="#configuracion" onClick={(event) => navigateToSection(event, "#configuracion")} className="focus-ring rounded-full p-2 text-ink/62 hover:bg-cloud hover:text-forest" aria-label="Configuración"><Settings className="h-5 w-5" /></a>
           <button type="button" onClick={() => { setSecurityOpen((value) => !value); setProfileOpen(false); }} className="focus-ring rounded-full p-2 text-ink/62 hover:bg-cloud hover:text-forest" aria-label="Información de seguridad"><ShieldCheck className="h-5 w-5" /></button>
           <button type="button" onClick={() => { setProfileOpen((value) => !value); setSecurityOpen(false); }} className="focus-ring ml-1 grid h-9 w-9 place-items-center overflow-hidden rounded-full border border-forest/20 bg-forest/10 text-sm font-bold text-forest" aria-label="Cuenta de usuario">{avatarUrl ? <Image unoptimized src={avatarUrl} alt={`Perfil de ${data.profileName}`} width={36} height={36} className="h-full w-full object-cover" /> : data.profileName.slice(0, 1).toUpperCase()}</button>
           <button type="button" onClick={() => setMobileOpen((value) => !value)} className="focus-ring rounded-full p-2 md:hidden" aria-label="Abrir navegación"><Menu className="h-5 w-5" /></button>
@@ -60,7 +69,7 @@ export function DashboardShell({ data, configured }: { data: DemoDashboardData |
           {profileOpen ? <div className="absolute right-0 top-12 w-72 rounded-xl border border-ink/10 bg-white p-4 shadow-2xl"><p className="font-semibold">{data.profileName}</p><p className="mt-1 truncate text-sm text-ink/55">{profileEmail}</p><p className="mt-3 inline-flex rounded-full bg-cloud px-3 py-1 text-xs font-bold text-forest">{data.role === "admin" ? "Administrador" : "Familia autorizada"}</p>{configured ? <button type="button" onClick={signOut} className="mt-4 flex w-full items-center gap-2 rounded-md border border-ink/10 px-3 py-2 text-sm font-semibold text-coral"><LogOut className="h-4 w-4" />Cerrar sesión</button> : null}</div> : null}
         </div>
       </div>
-      {mobileOpen ? <nav className="grid gap-1 border-t border-ink/8 bg-white/95 px-4 py-3 md:hidden">{navItems.map((item) => <a key={item.href} href={item.href} onClick={() => setMobileOpen(false)} className="rounded px-3 py-2 font-semibold hover:bg-cloud">{item.label}</a>)}</nav> : null}
+      {mobileOpen ? <nav className="grid gap-1 border-t border-ink/8 bg-white/95 px-4 py-3 md:hidden">{navItems.map((item) => <a key={item.href} href={item.href} onClick={(event) => navigateToSection(event, item.href)} className="rounded px-3 py-2 font-semibold hover:bg-cloud">{item.label}</a>)}</nav> : null}
     </header>
     <section className="mx-auto max-w-[1500px] px-4 py-5 sm:px-8 lg:px-10">
         <section id="portafolio" className="scroll-mt-20 pt-3">

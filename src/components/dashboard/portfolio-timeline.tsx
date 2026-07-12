@@ -19,22 +19,21 @@ export function PortfolioTimeline({ entries, areas, topics, showArchive = false,
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
-  const [student, setStudent] = useState("");
+  const [area, setArea] = useState("");
   const [kind, setKind] = useState("");
   const [visible, setVisible] = useState(6);
-  const students = useMemo(() => Array.from(new Map(entries.map((entry) => [entry.student_id, entry.student_name])).entries()), [entries]);
   const filtered = useMemo(() => entries.filter((entry) => {
     const text = `${entry.title} ${entry.summary} ${entry.student_name} ${entry.area} ${entry.topic}`.toLowerCase();
-    return (!query || text.includes(query.toLowerCase())) && (!student || entry.student_id === student) && (!kind || entry.evidence_kind === kind);
-  }), [entries, kind, query, student]);
+    return (!query || text.includes(query.toLowerCase())) && (!area || entry.area_id === area) && (!kind || entry.evidence_kind === kind);
+  }), [area, entries, kind, query]);
 
   return (
     <div>
       <div className={`grid items-center gap-3 rounded-lg border border-ink/8 bg-white p-4 shadow-line ${createAction ? "lg:grid-cols-[auto_auto_minmax(220px,1fr)_170px_150px]" : "md:grid-cols-[1fr_180px_160px]"}`}>
         {toolbarLead}
         {createAction}
-        <label className="relative"><Search className="absolute left-3 top-3.5 h-4 w-4 text-ink/42" /><span className="sr-only">Buscar</span><input value={query} onChange={(e) => { setQuery(e.target.value); setVisible(6); }} className="input pl-10" placeholder="Buscar evidencia, alumno o área" /></label>
-        <select value={student} onChange={(e) => { setStudent(e.target.value); setVisible(6); }} className="input" aria-label="Filtrar por alumno"><option value="">Todos los alumnos</option>{students.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
+        <label className="relative"><Search className="absolute left-4 top-3.5 h-4 w-4 text-ink/42" /><span className="sr-only">Buscar</span><input value={query} onChange={(e) => { setQuery(e.target.value); setVisible(6); }} className="input !pl-12" placeholder="Buscar evidencia, alumno o área" /></label>
+        <select value={area} onChange={(e) => { setArea(e.target.value); setVisible(6); }} className="input" aria-label="Filtrar por área de estudio"><option value="">Todas las áreas</option>{areas.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
         <select value={kind} onChange={(e) => { setKind(e.target.value); setVisible(6); }} className="input" aria-label="Filtrar por tipo"><option value="">Todos los tipos</option>{Object.entries(labels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
       </div>
       <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(min(100%,380px),1fr))] gap-4">
